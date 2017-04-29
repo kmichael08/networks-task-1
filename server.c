@@ -13,6 +13,13 @@
 #define BUFFER_SIZE 1000
 #define MAX_CLIENTS 42
 
+/**
+ * Send udp datagram.
+ * @buffer message to send
+ * @len length of message to send
+ * @client_address pointer to a structure with a client address
+ * @sock socket
+ */
 void send_udp(char* buffer, size_t len, struct sockaddr_in* client_address, socklen_t snda_len, int sock) {
     buffer[len] = '\0';
     int sflags = 0;
@@ -21,6 +28,48 @@ void send_udp(char* buffer, size_t len, struct sockaddr_in* client_address, sock
     if (snd_len != len)
         syserr("error on sending datagram to client socket");
 
+}
+
+/**
+ * Receive udp datagram.
+ * @buffer buffer for the message
+ * @client_address pointer to a structure with client address
+ * @sock socket
+ * @return length of received message
+ */
+size_t receive_udp(char* buffer, struct sockaddr_in* client_address, socklen_t* rcva_len, int sock) {
+    *rcva_len = (socklen_t) sizeof(*client_address);
+    int flags = 0; // we do not request anything special
+    size_t len = (size_t) recvfrom(sock, buffer, sizeof(buffer), flags,
+                   (struct sockaddr *) client_address, rcva_len);
+    if(len < 0) {
+        syserr("error on datagram from client socket");
+    }
+    else {
+        (void) printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
+    }
+    return len;
+}
+
+/**
+ * Appends content of the file to the buffer.
+ * @buffer buffer
+ * @filename name of the file
+ * @len position to start append
+ * @return new length of the buffer
+ */
+size_t append_file_content(char* buffer, char* filename, size_t len) {
+    size_t read_bytes = 0;
+    FILE *fp;
+    fp = fopen(filename, "r");
+    if (fp == NULL)
+        syserr("No such file: %s", filename);
+
+    read_bytes = fread(buffer + len, sizeof(char), BUFFER_SIZE - len - 1, fp);
+    fclose(fp);
+
+    len += read_bytes;
+    return len;
 }
 
 int main(int argc, char *argv[]) {
@@ -35,14 +84,11 @@ int main(int argc, char *argv[]) {
     uint16_t port = atoi(argv[1]);
     char* filename = argv[2];
 
-    FILE *fp;
-
     printf("%d %s\n", port, filename);
 
     //********************************************
 
     int sock;
-    int flags;
     struct sockaddr_in server_address;
     struct sockaddr_in client_address;
     char buffer[BUFFER_SIZE];
@@ -64,30 +110,11 @@ int main(int argc, char *argv[]) {
         syserr("bind");
 
     snda_len = (socklen_t) sizeof(client_address);
-    size_t read_bytes = 0;
 
     do {
-        rcva_len = (socklen_t) sizeof(client_address);
-        flags = 0; // we do not request anything special
-        len = recvfrom(sock, buffer, sizeof(buffer), flags,
-                       (struct sockaddr *) &client_address, &rcva_len);
-        if(len < 0)
-            syserr("error on datagram from client socket");
-        else {
-            (void) printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
-
-            fp = fopen(filename, "r");
-            if (fp == NULL)
-                syserr("No such file: %s", filename);
-
-            read_bytes = fread(buffer+len, sizeof(char), BUFFER_SIZE - len - 1, fp);
-            fclose(fp);
-
-            len += read_bytes;
-
+            len = receive_udp(buffer, &client_address, &rcva_len, sock);
+            len = append_file_content(buffer, filename, len);
             send_udp(buffer, len, &client_address, snda_len, sock);
-        }
-
     } while(len > 0);
 
 
