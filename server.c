@@ -6,21 +6,35 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <time.h>
+
 #include "err.h"
 #include "utils.h"
 
 // TODO how to define this value
 #define BUFFER_SIZE 1000
 #define MAX_CLIENTS 42
-struct sockaddr_in* clients[MAX_CLIENTS];
+#define TWO_MINUTES 10
+
+struct client {
+    struct sockaddr_in* address;
+    time_t start_time;
+};
+
+struct client clients[MAX_CLIENTS];
+
+int valid(struct client* client) {
+    return client->address != NULL && time(NULL) - client->start_time <= TWO_MINUTES;
+}
 
 /**
  * Add client address to an array, if there is a place for it.
  */
-void add_client_address(struct sockaddr_in* client_address) {
+void add_client_address(struct sockaddr_in* client_address, time_t start_time) {
     for (int i = 0; i < MAX_CLIENTS; i++)
-        if (clients[i] == NULL) {
-            clients[i] = client_address;
+        if (!valid(&clients[i])) {
+            clients[i].address = client_address;
+            clients[i].start_time = start_time;
             break;
         }
 }
@@ -56,7 +70,7 @@ size_t receive_udp(char* buffer, socklen_t* rcva_len, int sock) {
     size_t len = (size_t) recvfrom(sock, buffer, sizeof(buffer), flags,
                    (struct sockaddr *) client_address, rcva_len);
 
-    add_client_address(client_address);
+    add_client_address(client_address, time(NULL));
 
     if(len < 0) {
         syserr("error on datagram from client socket");
@@ -96,8 +110,8 @@ size_t append_file_content(char* buffer, char* filename, size_t len) {
  */
 void send_to_all(char* buffer, size_t len, socklen_t snda_len, int sock) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
-        if (clients[i] != NULL)
-            send_udp(buffer, len, clients[i], snda_len, sock);
+        if (valid(&clients[i]))
+            send_udp(buffer, len, clients[i].address, snda_len, sock);
     }
 }
 
