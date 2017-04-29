@@ -12,6 +12,18 @@
 // TODO how to define this value
 #define BUFFER_SIZE 1000
 #define MAX_CLIENTS 42
+struct sockaddr_in* clients[MAX_CLIENTS];
+
+/**
+ * Add client address to an array, if there is a place for it.
+ */
+void add_client_address(struct sockaddr_in* client_address) {
+    for (int i = 0; i < MAX_CLIENTS; i++)
+        if (clients[i] == NULL) {
+            clients[i] = client_address;
+            break;
+        }
+}
 
 /**
  * Send udp datagram.
@@ -37,11 +49,15 @@ void send_udp(char* buffer, size_t len, struct sockaddr_in* client_address, sock
  * @sock socket
  * @return length of received message
  */
-size_t receive_udp(char* buffer, struct sockaddr_in* client_address, socklen_t* rcva_len, int sock) {
+size_t receive_udp(char* buffer, socklen_t* rcva_len, int sock) {
+    struct sockaddr_in* client_address = malloc(sizeof(struct sockaddr_in));
     *rcva_len = (socklen_t) sizeof(*client_address);
     int flags = 0; // we do not request anything special
     size_t len = (size_t) recvfrom(sock, buffer, sizeof(buffer), flags,
                    (struct sockaddr *) client_address, rcva_len);
+
+    add_client_address(client_address);
+
     if(len < 0) {
         syserr("error on datagram from client socket");
     }
@@ -70,6 +86,19 @@ size_t append_file_content(char* buffer, char* filename, size_t len) {
 
     len += read_bytes;
     return len;
+}
+
+/**
+ * Send udp datagram to all clients.
+ * @buffer message to send
+ * @len length of message to send
+ * @sock socket
+ */
+void send_to_all(char* buffer, size_t len, socklen_t snda_len, int sock) {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (clients[i] != NULL)
+            send_udp(buffer, len, clients[i], snda_len, sock);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -112,9 +141,9 @@ int main(int argc, char *argv[]) {
     snda_len = (socklen_t) sizeof(client_address);
 
     do {
-            len = receive_udp(buffer, &client_address, &rcva_len, sock);
+            len = receive_udp(buffer, &rcva_len, sock);
             len = append_file_content(buffer, filename, len);
-            send_udp(buffer, len, &client_address, snda_len, sock);
+            send_to_all(buffer, len, snda_len, sock);
     } while(len > 0);
 
 
