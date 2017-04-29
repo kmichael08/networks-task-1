@@ -7,20 +7,11 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "err.h"
+#include "utils.h"
 
+// TODO how to define this value
 #define BUFFER_SIZE 1000
 #define MAX_CLIENTS 42
-
-/* Check if string is a number */
-int is_num(char* num) {
-    int i = 0;
-    size_t len = strlen(num);
-    for (; i < len; i++) {
-        if (!isdigit(*(num+i)))
-            return 0;
-    }
-    return 1;
-}
 
 int main(int argc, char *argv[]) {
 

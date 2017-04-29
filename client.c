@@ -6,29 +6,14 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include <ctype.h>
 
 #include "err.h"
+#include "utils.h"
 
+// TODO how to define this value
 #define BUFFER_SIZE 1000
 #define secs_1717_year -7983878400
 #define secs_4243_year 71697398400
-
-/* Check if string is a number */
-int is_num(char* num) {
-    int i = 0;
-    size_t len = strlen(num);
-    for (; i < len; i++) {
-        if (!isdigit(*(num+i)))
-            return 0;
-    }
-
-    return 1;
-}
-
-int is_one_char(char *c) {
-    return strlen(c) == 1;
-}
 
 int main(int argc, char* argv[]) {
 
@@ -60,14 +45,14 @@ int main(int argc, char* argv[]) {
         port = atoi(argv[4]);
     }
 
-    printf("%lld %c %s %d\n", timestamp, c, host, port);
+    printf("%lld %s %s %d\n", timestamp, c, host, port);
 
     //**************************************************
     int sock;
     struct addrinfo addr_hints;
     struct addrinfo *addr_result;
 
-    int i, flags, sflags;
+    int flags, sflags;
     char buffer[BUFFER_SIZE];
     size_t len;
     ssize_t snd_len, rcv_len;
