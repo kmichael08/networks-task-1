@@ -13,6 +13,16 @@
 #define BUFFER_SIZE 1000
 #define MAX_CLIENTS 42
 
+void send_udp(char* buffer, size_t len, struct sockaddr_in* client_address, socklen_t snda_len, int sock) {
+    buffer[len] = '\0';
+    int sflags = 0;
+    ssize_t snd_len = sendto(sock, buffer, (size_t) len, sflags,
+                     (struct sockaddr *) client_address, snda_len);
+    if (snd_len != len)
+        syserr("error on sending datagram to client socket");
+
+}
+
 int main(int argc, char *argv[]) {
 
     if (argc < 3) {
@@ -32,12 +42,12 @@ int main(int argc, char *argv[]) {
     //********************************************
 
     int sock;
-    int flags, sflags;
+    int flags;
     struct sockaddr_in server_address;
     struct sockaddr_in client_address;
     char buffer[BUFFER_SIZE];
     socklen_t snda_len, rcva_len;
-    ssize_t len, snd_len;
+    ssize_t len;
 
     sock = socket(AF_INET, SOCK_DGRAM, 0); // creating IPv4 UDP socket
     if (sock < 0)
@@ -74,13 +84,8 @@ int main(int argc, char *argv[]) {
             fclose(fp);
 
             len += read_bytes;
-            buffer[len] = '\0';
-            sflags = 0;
-            snd_len = sendto(sock, buffer, (size_t) len, sflags,
-                             (struct sockaddr *) &client_address, snda_len);
-            if (snd_len != len)
-                syserr("error on sending datagram to client socket");
 
+            send_udp(buffer, len, &client_address, snda_len, sock);
         }
 
     } while(len > 0);
