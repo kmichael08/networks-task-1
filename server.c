@@ -35,10 +35,6 @@ int main(int argc, char *argv[]) {
     char* filename = argv[2];
 
     FILE *fp;
-    fp = fopen(filename, "r");
-
-    if (fp == NULL)
-        syserr("No such file: %s", filename);
 
     printf("%d %s\n", port, filename);
 
@@ -67,28 +63,37 @@ int main(int argc, char *argv[]) {
         syserr("bind");
 
     snda_len = (socklen_t) sizeof(client_address);
+    size_t read_bytes = 0;
 
-    for(;;) {
-        do {
-            rcva_len = (socklen_t) sizeof(client_address);
-            flags = 0; // we do not request anything special
-            len = recvfrom(sock, buffer, sizeof(buffer), flags,
-                           (struct sockaddr *) &client_address, &rcva_len);
-            if(len < 0)
-                syserr("error on datagram from client socket");
-            else {
-                (void) printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
-                sflags = 0;
-                snd_len = sendto(sock, buffer, (size_t) len, sflags,
-                                 (struct sockaddr *) &client_address, snda_len);
-                if (snd_len != len)
-                    syserr("error on sending datagram to client socket");
+    do {
+        rcva_len = (socklen_t) sizeof(client_address);
+        flags = 0; // we do not request anything special
+        len = recvfrom(sock, buffer, sizeof(buffer), flags,
+                       (struct sockaddr *) &client_address, &rcva_len);
+        if(len < 0)
+            syserr("error on datagram from client socket");
+        else {
+            (void) printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
 
-            }
+            fp = fopen(filename, "r");
+            if (fp == NULL)
+                syserr("No such file: %s", filename);
 
-        } while(len > 0);
-    }
+            read_bytes = fread(buffer+len, sizeof(char), BUFFER_SIZE - len - 1, fp);
+            fclose(fp);
 
-    fclose(fp);
+            len += read_bytes;
+            buffer[len] = '\0';
+            sflags = 0;
+            snd_len = sendto(sock, buffer, (size_t) len, sflags,
+                             (struct sockaddr *) &client_address, snda_len);
+            if (snd_len != len)
+                syserr("error on sending datagram to client socket");
+
+        }
+
+    } while(len > 0);
+
+
     return 0;
 }
