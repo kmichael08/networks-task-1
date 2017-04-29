@@ -1,1 +1,7 @@
-/.idea
+#ignore all
+*
+
+!*.c
+!*.h
+!*.txt
+!przeczytaj-mnie
