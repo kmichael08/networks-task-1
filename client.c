@@ -12,8 +12,6 @@
 
 // TODO how to define this value
 #define BUFFER_SIZE 1000
-#define secs_1717_year -7983878400
-#define secs_4243_year 71697398400
 
 int main(int argc, char* argv[]) {
 
@@ -23,13 +21,7 @@ int main(int argc, char* argv[]) {
     if (!is_num(argv[1]))
         fatal("timestamp should be a number");
 
-    /* TODO May not work properly!! */
-    int64_t timestamp = atoll(argv[1]);
     char *timestamp_str = argv[1];
-
-    /* TODO check this values also in C */
-    if (timestamp < secs_1717_year || timestamp >= secs_4243_year)
-        fatal("Year should be in [1717, 4242]");
 
     if (!is_one_char(argv[2]))
         fatal("Just one character");
@@ -45,7 +37,6 @@ int main(int argc, char* argv[]) {
         port = atoi(argv[4]);
     }
 
-    printf("%lld %s %s %d\n", timestamp, c, host, port);
 
     //**************************************************
     int sock;
@@ -85,11 +76,16 @@ int main(int argc, char* argv[]) {
     if (sock < 0)
         syserr("socket");
 
-    size_t timestamp_len = strnlen(timestamp_str, BUFFER_SIZE);
-    strncpy(buffer, timestamp_str, timestamp_len);
-    strncpy(buffer + timestamp_len, c, 2);
+    char space[] = " \0";
 
-    len = timestamp_len + 1;
+    size_t timestamp_len = strnlen(timestamp_str, BUFFER_SIZE);
+    strncpy(buffer, timestamp_str, timestamp_len + 1);
+    strncpy(buffer + timestamp_len, space, 2);
+    strncpy(buffer + timestamp_len + 1, c, 2);
+    strncpy(buffer + timestamp_len + 2, space, 2);
+    buffer[timestamp_len + 3] = '\0';
+
+    len = timestamp_len + 4;
     sflags = 0;
     rcva_len = (socklen_t) sizeof(my_address);
     snd_len = sendto(sock, buffer, len, sflags,

@@ -14,6 +14,7 @@
 // TODO how to define this value
 #define BUFFER_SIZE 1000
 #define MAX_CLIENTS 42
+//TODO redefine it to 120
 #define TWO_MINUTES 10
 
 struct client {
@@ -67,17 +68,17 @@ size_t receive_udp(char* buffer, socklen_t* rcva_len, int sock) {
     struct sockaddr_in* client_address = malloc(sizeof(struct sockaddr_in));
     *rcva_len = (socklen_t) sizeof(*client_address);
     int flags = 0; // we do not request anything special
-    size_t len = (size_t) recvfrom(sock, buffer, sizeof(buffer), flags,
+    size_t len = (size_t) recvfrom(sock, buffer, BUFFER_SIZE, flags,
                    (struct sockaddr *) client_address, rcva_len);
+
+    if(len < 0 || !valid_timestamp(buffer)) {
+        fprintf(stderr, "Wrong datagram from %d\n", client_address->sin_addr.s_addr);
+        return 0;
+    }
 
     add_client_address(client_address, time(NULL));
 
-    if(len < 0) {
-        syserr("error on datagram from client socket");
-    }
-    else {
-        (void) printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
-    }
+    printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
     return len;
 }
 
@@ -95,7 +96,7 @@ size_t append_file_content(char* buffer, char* filename, size_t len) {
     if (fp == NULL)
         syserr("No such file: %s", filename);
 
-    read_bytes = fread(buffer + len, sizeof(char), BUFFER_SIZE - len - 1, fp);
+    read_bytes = fread(buffer + len - 1, sizeof(char), BUFFER_SIZE - len - 1, fp);
     fclose(fp);
 
     len += read_bytes;
@@ -154,11 +155,14 @@ int main(int argc, char *argv[]) {
 
     snda_len = (socklen_t) sizeof(client_address);
 
-    do {
-            len = receive_udp(buffer, &rcva_len, sock);
+    while (1) {
+        len = receive_udp(buffer, &rcva_len, sock);
+        if (len > 0) {
             len = append_file_content(buffer, filename, len);
             send_to_all(buffer, len, snda_len, sock);
-    } while(len > 0);
+        }
+    }
+
 
 
     return 0;
