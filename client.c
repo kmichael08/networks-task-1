@@ -12,6 +12,7 @@
 
 // TODO how to define this value
 #define BUFFER_SIZE 1000
+#define DEFAULT_PORT 20160
 
 int main(int argc, char* argv[]) {
 
@@ -29,7 +30,7 @@ int main(int argc, char* argv[]) {
     char *c = argv[2];
     char *host = argv[3];
 
-    int port = 20160;
+    int port = DEFAULT_PORT;
 
     if (argc == 5) {
         if (!is_num(argv[4]))
@@ -94,12 +95,14 @@ int main(int argc, char* argv[]) {
         syserr("partial/failed write");
     }
 
+    (void) memset(buffer, 0, sizeof(buffer));
+    flags = 0;
+    len = (size_t) sizeof(buffer) - 1;
+    rcva_len = (socklen_t) sizeof(srvr_address);
+
+
     // RECEIVING DATAGRAMS
     while(1) {
-        (void) memset(buffer, 0, sizeof(buffer));
-        flags = 0;
-        len = (size_t) sizeof(buffer) - 1;
-        rcva_len = (socklen_t) sizeof(srvr_address);
         rcv_len = recvfrom(sock, buffer, len, flags,
                            (struct sockaddr *) &srvr_address, &rcva_len);
 
@@ -109,10 +112,6 @@ int main(int argc, char* argv[]) {
         (void) printf("%s", buffer);
     }
 
-    if (close(sock) == -1) { //very rare errors can occur here, but then
-        syserr("close"); //it's healthy to do the check
-    }
 
-    return 0;
 }
 
