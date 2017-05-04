@@ -92,12 +92,43 @@ public:
 
 };
 
+class DatagramCyclicBuffer {
+private:
+    static const int MAX_STORAGE = 4096;
+    Datagram* datagram_buffer[MAX_STORAGE];
+    int waiting_datagrams;
+    int read_index, write_index;
+public:
+    DatagramCyclicBuffer() {
+        waiting_datagrams = 0;
+        read_index = 0;
+        write_index = 0;
+    }
+    void push_datagram(Datagram* datagram) {
+        datagram_buffer[write_index] = datagram;
+        write_index = (write_index + 1) % MAX_STORAGE;
+        if (waiting_datagrams < 4096)
+            waiting_datagrams++;
+        else {
+            read_index = (read_index + 1);
+        }
+    }
+
+    Datagram* take_datagram() {
+        if (waiting_datagrams == 0)
+            return NULL;
+        waiting_datagrams--;
+        return datagram_buffer[read_index++];
+    }
+
+};
+
 class Server {
 private:
     static const int MAX_CLIENTS = 42;
     std::vector<Client*> clients_vec;
     char *filename;
-    Datagram* datagram;
+    DatagramCyclicBuffer datagram_cyclic_buffer;
     int sock;
     struct sockaddr_in server_address;
     struct sockaddr_in client_address;
@@ -170,7 +201,7 @@ public:
         size_t len = (size_t) recvfrom(sock, buffer, BUFFER_SIZE, flags,
                                        (sockaddr *) client_address, &rcva_len);
 
-        datagram = new Datagram(len, buffer);
+        Datagram* datagram = new Datagram(len, buffer);
 
         if (!datagram->valid_datagram()) {
             fprintf(stderr, "Wrong datagram from client %d port %d\n", client_address->sin_addr.s_addr, client_address->sin_port);
@@ -183,6 +214,8 @@ public:
 
         datagram->append_file_content(filename);
 
+        datagram_cyclic_buffer.push_datagram(datagram);
+
         add_client(client_address);
 
     }
@@ -191,10 +224,16 @@ public:
      * Send udp datagram to all clients.
      */
     void send_to_all() {
+        Datagram* datagram = datagram_cyclic_buffer.take_datagram();
+
+        /* TODO erase it. Test only */
+        if (datagram == NULL)
+            printf("No datagram! But there should be one!\n");
+
         for (unsigned i = 0; i < clients_vec.size(); i++)
-            if (clients_vec[i]->is_alive()) {
+            if (clients_vec[i]->is_alive())
                 datagram->send_udp(clients_vec[i]->get_address(), snda_len, sock);
-            }
+
     }
 
 };
