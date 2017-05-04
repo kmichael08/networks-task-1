@@ -9,6 +9,12 @@
 // TODO how to define this value
 #define BUFFER_SIZE 1000
 
+FILE* get_file_pointer(char *filename) {
+    FILE* fp = fopen(filename, "r");
+    if (fp == NULL)
+        syserr("No such file: %s", filename);
+    return fp;
+}
 
 class Client {
 private:
@@ -18,6 +24,9 @@ private:
     static const unsigned TWO_MINUTES = 10;
 public:
     Client(time_t start_time, sockaddr_in* client_address) : start_time(start_time), address(client_address) {}
+    /**
+     * Check if the client is equal to another.
+     */
     bool equal(Client* other) {
         return address->sin_port == other->address->sin_port && address->sin_addr.s_addr == other->address->sin_addr.s_addr;
     }
@@ -60,12 +69,8 @@ public:
      * Appends content of the file to the datagram.
      * @filename name of the file
      */
-    void append_file_content(char* filename) {
+    void append_file_content(FILE *fp) {
         size_t read_bytes = 0;
-        FILE *fp;
-        fp = fopen(filename, "r");
-        if (fp == NULL)
-            syserr("No such file: %s", filename);
 
         read_bytes = fread(datagram + len - 1, sizeof(char), BUFFER_SIZE - len - 1, fp);
         fclose(fp);
@@ -89,6 +94,9 @@ public:
 
 };
 
+/**
+ * Cyclic buffer storing datagrams.
+ */
 class DatagramCyclicBuffer {
 private:
     static const int MAX_STORAGE = 4096;
@@ -101,6 +109,10 @@ public:
         read_index = 0;
         write_index = 0;
     }
+
+    /**
+     * Push datagram to the buffer. Overwrite the oldest.
+     */
     void push_datagram(Datagram* datagram) {
         datagram_buffer[write_index] = datagram;
         write_index = (write_index + 1) % MAX_STORAGE;
@@ -111,6 +123,9 @@ public:
         }
     }
 
+    /**
+     * Take the oldest datagram. Return NULL if there is no datagram.
+     */
     Datagram* take_datagram() {
         if (waiting_datagrams == 0)
             return NULL;
@@ -149,10 +164,6 @@ public:
             syserr("bind");
 
         snda_len = (socklen_t) sizeof(client_address);
-    }
-
-    pollfd* get_sock() {
-        return sock;
     }
 
     /**
@@ -215,7 +226,7 @@ public:
             printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
         }
 
-        datagram->append_file_content(filename);
+        datagram->append_file_content(get_file_pointer(filename));
 
         datagram_cyclic_buffer.push_datagram(datagram);
 
@@ -229,7 +240,6 @@ public:
     void send_to_all() {
         Datagram* datagram = datagram_cyclic_buffer.take_datagram();
 
-        /* TODO erase it. Test only */
         if (datagram != NULL)
             for (unsigned i = 0; i < clients_vec.size(); i++)
                 if (clients_vec[i]->is_alive())
@@ -248,8 +258,6 @@ public:
 };
 
 
-
-
 int main(int argc, char *argv[]) {
 
     if (argc < 3) {
@@ -261,6 +269,9 @@ int main(int argc, char *argv[]) {
 
     uint16_t port = atoi(argv[1]);
     char* filename = argv[2];
+
+    /* Just check if filename is valid. */
+    (void) get_file_pointer(filename);
 
     /* TODO erase it */
     printf("%d %s\n", port, filename);
