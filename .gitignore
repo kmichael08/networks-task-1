@@ -1,6 +1,7 @@
-#ignore all
+# ignore all
 *
 
+# unignore cpp files and text files
 !*.cc
 !*.h
 !*.txt

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <vector>
 #include <ctime>
+#include <poll.h>
 
 #include "err.h"
 #include "utils.h"
@@ -126,10 +127,11 @@ public:
 class Server {
 private:
     static const int MAX_CLIENTS = 42;
+    static const int TIMEOUT_MILLISECS = 500;
     std::vector<Client*> clients_vec;
     char *filename;
     DatagramCyclicBuffer datagram_cyclic_buffer;
-    int sock;
+    pollfd* sock;
     struct sockaddr_in server_address;
     struct sockaddr_in client_address;
     socklen_t snda_len, rcva_len;
@@ -137,8 +139,9 @@ private:
 public:
 
     Server(char* filename, uint16_t port) : filename(filename), port(port) {
-        sock = socket(AF_INET, SOCK_DGRAM, 0); // creating IPv4 UDP socket
-        if (sock < 0)
+        sock = new pollfd;
+        sock->fd = socket(AF_INET, SOCK_DGRAM, 0); // creating IPv4 UDP socket
+        if (sock->fd < 0)
             syserr("socket");
 
         server_address.sin_family = AF_INET; //IPv4
@@ -146,10 +149,14 @@ public:
         server_address.sin_port = htons(port);
 
         // bin the socket to a concrete address
-        if (bind(sock, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address)) < 0)
+        if (bind(sock->fd, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address)) < 0)
             syserr("bind");
 
         snda_len = (socklen_t) sizeof(client_address);
+    }
+
+    pollfd* get_sock() {
+        return sock;
     }
 
     /**
@@ -198,7 +205,7 @@ public:
         int flags = 0; // we do not request anything special
         char* buffer = new char[BUFFER_SIZE];
 
-        size_t len = (size_t) recvfrom(sock, buffer, BUFFER_SIZE, flags,
+        size_t len = (size_t) recvfrom(sock->fd, buffer, BUFFER_SIZE, flags,
                                        (sockaddr *) client_address, &rcva_len);
 
         Datagram* datagram = new Datagram(len, buffer);
@@ -227,16 +234,25 @@ public:
         Datagram* datagram = datagram_cyclic_buffer.take_datagram();
 
         /* TODO erase it. Test only */
-        if (datagram == NULL)
-            printf("No datagram! But there should be one!\n");
-
-        for (unsigned i = 0; i < clients_vec.size(); i++)
-            if (clients_vec[i]->is_alive())
-                datagram->send_udp(clients_vec[i]->get_address(), snda_len, sock);
+        if (datagram != NULL)
+            for (unsigned i = 0; i < clients_vec.size(); i++)
+                if (clients_vec[i]->is_alive())
+                    datagram->send_udp(clients_vec[i]->get_address(), snda_len, sock->fd);
 
     }
 
+    /**
+     * @return if true then server listens datagrams, otherwise it broadcasts datagrams to clients.
+     */
+    bool listen() {
+        sock->events = POLLIN;
+        sock->revents = 0;
+        return poll(sock, 1, TIMEOUT_MILLISECS) == 1;
+    }
 };
+
+
+
 
 int main(int argc, char *argv[]) {
 
@@ -259,8 +275,10 @@ int main(int argc, char *argv[]) {
 
 
     while (true) {
-        server.receive_udp();
-        server.send_to_all();
+        if (server.listen())
+            server.receive_udp();
+        else
+            server.send_to_all();
     }
 
 }
