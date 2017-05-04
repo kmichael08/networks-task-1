@@ -1,6 +1,3 @@
-1) poll mechanism + buffer of datagrams
-2) TODO's
-3) test on students or even virtual machines
-4) test parsing errors
-5) read the task description very carefully
-6) read szkopul
+1) test parsing errors
+4) test on students
+5) put to students

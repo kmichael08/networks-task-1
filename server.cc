@@ -2,11 +2,11 @@
 #include <vector>
 #include <ctime>
 #include <poll.h>
+#include <cstring>
+#include <iostream>
 
 #include "err.h"
-#include "utils.h"
 
-// TODO how to define this value
 #define BUFFER_SIZE 1000
 
 FILE* get_file_pointer(char *filename) {
@@ -20,8 +20,7 @@ class Client {
 private:
     time_t start_time;
     sockaddr_in* address;
-    //TODO redefine it to 120
-    static const unsigned TWO_MINUTES = 10;
+    static const unsigned TWO_MINUTES = 120;
 public:
     Client(time_t start_time, sockaddr_in* client_address) : start_time(start_time), address(client_address) {}
     /**
@@ -42,9 +41,8 @@ class Datagram {
 private:
     size_t len;
     char datagram[BUFFER_SIZE];
-    /* TODO check this value out */
-    static const long long secs_1717_year = -7983878400;
-    static const long long secs_4243_year = 71697398400;
+    Client* source;
+    static const unsigned long long secs_4243_year = 71697398400;
 
 public:
     /**
@@ -58,11 +56,18 @@ public:
 
     /**
      * Validate the datagram.
-     * TODO full validation, types
      */
     bool valid_datagram() {
-        int64_t timestamp = atoll(datagram);
-        return timestamp >= secs_1717_year && timestamp < secs_4243_year;
+        try {
+            uint64_t timestamp = std::stoull(datagram);
+            return timestamp < secs_4243_year;
+        }
+        catch (std::out_of_range& e) {
+            return false;
+        }
+        catch (std::invalid_argument& e) {
+            return false;
+        }
     }
 
     /**
@@ -90,6 +95,17 @@ public:
                                  (sockaddr *) client_address, snda_len);
         if (snd_len < 0 || size_t(snd_len) != len)
             syserr("error on sending datagram to client socket");
+    }
+
+    void set_source_client(Client *client) {
+        source = client;
+    }
+
+    /**
+     * Check if the given client is the source client
+     */
+    bool from_client(Client* client) {
+        return source->equal(client);
     }
 
 };
@@ -198,9 +214,11 @@ public:
     /**
      * Add client to the vector of served clients.
      * @client_address pointer to the address of the client
+     * @return pointer to the created client or NULL if client won't be served.
      */
-    bool add_client(sockaddr_in* client_address) {
-        return add_client(new Client(time(NULL), client_address));
+    Client* add_client(sockaddr_in* client_address) {
+        Client* client = new Client(time(NULL), client_address);
+        return add_client(client) ? client : NULL;
     }
 
     /**
@@ -221,16 +239,14 @@ public:
             fprintf(stderr, "Wrong datagram from client %d port %d\n", client_address->sin_addr.s_addr, client_address->sin_port);
             return;
         }
-        else {
-            /* TODO erase it */
-            printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
-        }
 
         datagram->append_file_content(get_file_pointer(filename));
 
         datagram_cyclic_buffer.push_datagram(datagram);
 
-        add_client(client_address);
+        Client* client = add_client(client_address);
+
+        datagram->set_source_client(client);
 
     }
 
@@ -242,7 +258,7 @@ public:
 
         if (datagram != NULL)
             for (unsigned i = 0; i < clients_vec.size(); i++)
-                if (clients_vec[i]->is_alive())
+                if (clients_vec[i]->is_alive() && !datagram->from_client(clients_vec[i]))
                     datagram->send_udp(clients_vec[i]->get_address(), snda_len, sock->fd);
 
     }
@@ -264,28 +280,33 @@ int main(int argc, char *argv[]) {
         fatal("Usage: %s port filename... \n", argv[0]);
     }
 
-    if (!is_num(argv[1]))
-        fatal("Port should be a number");
+    try {
+        int port = std::stoi(argv[1]);
+        if (port > UINT16_MAX || port < 0)
+            syserr("Port too large");
 
-    uint16_t port = atoi(argv[1]);
-    char* filename = argv[2];
+        char* filename = argv[2];
 
-    /* Just check if filename is valid. */
-    (void) get_file_pointer(filename);
+        /* Just check if filename is valid. */
+        (void) get_file_pointer(filename);
 
-    /* TODO erase it */
-    printf("%d %s\n", port, filename);
-
-    Server server = Server(filename, port);
+        Server server = Server(filename, (uint16_t) port);
 
     //********************************************
 
 
-    while (true) {
-        if (server.listen())
-            server.receive_udp();
-        else
-            server.send_to_all();
+        while (true) {
+            if (server.listen())
+                server.receive_udp();
+            else
+                server.send_to_all();
+        }
+    }
+    catch (std::out_of_range& e) {
+        syserr("Port number is out of range");
+    }
+    catch (std::invalid_argument& e) {
+        syserr("Port should be a number");
     }
 
 }

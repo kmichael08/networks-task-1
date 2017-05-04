@@ -1,49 +1,24 @@
 #include <netdb.h>
-
+#include <iostream>
 #include "err.h"
 #include "utils.h"
 
-// TODO how to define this value
 #define BUFFER_SIZE 1000
 #define DEFAULT_PORT 20160
 
-int main(int argc, char* argv[]) {
+int sock;
+struct addrinfo addr_hints;
+struct addrinfo *addr_result;
 
-    if (argc < 4)
-        fatal("Usage: %s timestamp c host [port]", argv[0]);
+int flags, sflags;
+char buffer[BUFFER_SIZE];
+size_t len;
+ssize_t snd_len, rcv_len;
+struct sockaddr_in my_address;
+struct sockaddr_in srvr_address;
+socklen_t rcva_len;
 
-    if (!is_num(argv[1]))
-        fatal("timestamp should be a number");
-
-    char *timestamp_str = argv[1];
-
-    if (!is_one_char(argv[2]))
-        fatal("Just one character");
-
-    char *c = argv[2];
-    char *host = argv[3];
-
-    int port = DEFAULT_PORT;
-
-    if (argc == 5) {
-        if (!is_num(argv[4]))
-            fatal("Port should be a number");
-        port = atoi(argv[4]);
-    }
-
-
-    //**************************************************
-    int sock;
-    struct addrinfo addr_hints;
-    struct addrinfo *addr_result;
-
-    int flags, sflags;
-    char buffer[BUFFER_SIZE];
-    size_t len;
-    ssize_t snd_len, rcv_len;
-    struct sockaddr_in my_address;
-    struct sockaddr_in srvr_address;
-    socklen_t rcva_len;
+void init_connection(char* host, char* timestamp_str, char* c, int port) {
 
     // 'converting' host/port in string to struct addrinfo
     (void) memset(&addr_hints, 0, sizeof(struct addrinfo));
@@ -82,6 +57,44 @@ int main(int argc, char* argv[]) {
     len = timestamp_len + 4;
     sflags = 0;
     rcva_len = (socklen_t) sizeof(my_address);
+
+}
+
+int main(int argc, char* argv[]) {
+
+    if (argc < 4)
+        fatal("Usage: %s timestamp c host [port]", argv[0]);
+
+    if (!is_num(argv[1]))
+        fatal("timestamp should be a number");
+
+    char *timestamp_str = argv[1];
+
+    if (!is_one_char(argv[2]))
+        fatal("Just one character");
+
+    char *c = argv[2];
+    char *host = argv[3];
+
+    int port = DEFAULT_PORT;
+
+    if (argc == 5) {
+        try {
+            port = std::stoi(argv[4]);
+        }
+        catch (std::invalid_argument) {
+            syserr("Port should be a number");
+        }
+        catch (std::out_of_range) {
+            syserr("Port is out of range");
+        }
+    }
+
+
+    //**************************************************
+
+    init_connection(host, timestamp_str, c, port);
+
     snd_len = sendto(sock, buffer, len, sflags,
                      (struct sockaddr *) &my_address, rcva_len);
     if (snd_len != (ssize_t) len) {
