@@ -21,8 +21,10 @@ private:
     static const unsigned TWO_MINUTES = 10;
 public:
     Client(time_t start_time, sockaddr_in* client_address) : start_time(start_time), address(client_address) {}
-    /* TODO implement it */
-    bool equal(Client* other) { return false; }
+    bool equal(Client* other) {
+        return address->sin_port == other->address->sin_port && address->sin_addr.s_addr == other->address->sin_addr.s_addr;
+    }
+
     void update_time(time_t new_time) { start_time = new_time; }
     bool is_alive() {
         return address != NULL && time(NULL) - start_time <= TWO_MINUTES;
@@ -72,6 +74,7 @@ public:
         fclose(fp);
 
         len += read_bytes;
+        datagram[len] = '\0';
     }
 
     /**
@@ -80,20 +83,11 @@ public:
     * @sock socket
     */
     void send_udp(struct sockaddr_in* client_address, socklen_t snda_len, int sock) {
-        datagram[len] = '\0';
         int sflags = 0;
         ssize_t snd_len = sendto(sock, datagram, (size_t) len, sflags,
                                  (sockaddr *) client_address, snda_len);
         if (snd_len != len)
             syserr("error on sending datagram to client socket");
-    }
-
-    char* datagram_to_send() {
-        return datagram;
-    }
-
-    unsigned length() {
-        return len;
     }
 
 };
@@ -109,30 +103,38 @@ public:
     Server(char* filename) : filename(filename) {}
 
     /**
-     * Add client to the vector of served client.
+     * Add client to the vector of served clients.
      * @return success of adding a client.
      */
     bool add_client(Client* client) {
-        for (int i = 0; i < clients_vec.size(); i++)
+        /* if client already found then just update time */
+        for (unsigned i = 0; i < clients_vec.size(); i++)
             if (clients_vec[i]->equal(client)) {
                 clients_vec[i]->update_time(time(NULL));
                 return true;
             }
 
-        for (int i = 0; i < clients_vec.size(); i++)
+        /* replace expired client */
+        for (unsigned i = 0; i < clients_vec.size(); i++)
             if (!clients_vec[i]->is_alive()) {
                 clients_vec[i] = client;
                 return true;
             }
 
+        /* push to the end if client limit not exceeded */
         if (clients_vec.size() < MAX_CLIENTS) {
             clients_vec.push_back(client);
             return true;
         }
 
+        /* fail - too much active clients */
         return false;
     }
 
+    /**
+     * Add client to the vector of served clients.
+     * @client_address pointer to the address of the client
+     */
     bool add_client(sockaddr_in* client_address) {
         return add_client(new Client(time(NULL), client_address));
     }
@@ -145,7 +147,7 @@ public:
         struct sockaddr_in* client_address = new(sockaddr_in);
         *rcva_len = (socklen_t) sizeof(*client_address);
         int flags = 0; // we do not request anything special
-        char buffer[BUFFER_SIZE];
+        char* buffer = new char[BUFFER_SIZE];
 
         size_t len = (size_t) recvfrom(sock, buffer, BUFFER_SIZE, flags,
                                        (sockaddr *) client_address, rcva_len);
@@ -153,18 +155,19 @@ public:
         datagram = new Datagram(len, buffer);
 
         if (!datagram->valid_datagram()) {
-            fprintf(stderr, "Wrong datagram from %d\n", client_address->sin_addr.s_addr);
+            fprintf(stderr, "Wrong datagram from client %d port %d\n", client_address->sin_addr.s_addr, client_address->sin_port);
             return;
+        }
+        else {
+            /* TODO erase it */
+            printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
         }
 
         datagram->append_file_content(filename);
 
         add_client(client_address);
 
-        printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
     }
-
-
 
     /**
      * Send udp datagram to all clients_vec.
@@ -172,9 +175,10 @@ public:
      * @sock socket
      */
     void send_to_all(socklen_t snda_len, int sock) {
-        for (int i = 0; i < clients_vec.size(); i++)
-            if (clients_vec[i]->is_alive())
+        for (unsigned i = 0; i < clients_vec.size(); i++)
+            if (clients_vec[i]->is_alive()) {
                 datagram->send_udp(clients_vec[i]->get_address(), snda_len, sock);
+            }
     }
 
 };
@@ -219,12 +223,9 @@ int main(int argc, char *argv[]) {
     //********************************************
 
 
-    while (1) {
+    while (true) {
         server.receive_udp(&rcva_len, sock);
         server.send_to_all(snda_len, sock);
     }
 
-
-
-    return 0;
 }
