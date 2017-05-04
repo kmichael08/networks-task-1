@@ -1,7 +1,7 @@
 #ignore all
 *
 
-!*.c
+!*.cc
 !*.h
 !*.txt
 !przeczytaj-mnie
