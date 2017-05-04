@@ -1,8 +1,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <stdio.h>
+#include <cstdio>
 #include <netinet/in.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include <vector>
 #include <ctime>
 
@@ -86,7 +86,7 @@ public:
         int sflags = 0;
         ssize_t snd_len = sendto(sock, datagram, (size_t) len, sflags,
                                  (sockaddr *) client_address, snda_len);
-        if (snd_len != len)
+        if (snd_len < 0 || size_t(snd_len) != len)
             syserr("error on sending datagram to client socket");
     }
 
@@ -98,9 +98,28 @@ private:
     std::vector<Client*> clients_vec;
     char *filename;
     Datagram* datagram;
+    int sock;
+    struct sockaddr_in server_address;
+    struct sockaddr_in client_address;
+    socklen_t snda_len, rcva_len;
+    uint16_t port;
 public:
 
-    Server(char* filename) : filename(filename) {}
+    Server(char* filename, uint16_t port) : filename(filename), port(port) {
+        sock = socket(AF_INET, SOCK_DGRAM, 0); // creating IPv4 UDP socket
+        if (sock < 0)
+            syserr("socket");
+
+        server_address.sin_family = AF_INET; //IPv4
+        server_address.sin_addr.s_addr = htonl(INADDR_ANY); //listening on all interfaces
+        server_address.sin_port = htons(port);
+
+        // bin the socket to a concrete address
+        if (bind(sock, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address)) < 0)
+            syserr("bind");
+
+        snda_len = (socklen_t) sizeof(client_address);
+    }
 
     /**
      * Add client to the vector of served clients.
@@ -141,16 +160,15 @@ public:
 
     /**
      * Receive udp datagram.
-     * @sock socket
      */
-    void receive_udp(socklen_t* rcva_len, int sock) {
+    void receive_udp() {
         struct sockaddr_in* client_address = new(sockaddr_in);
-        *rcva_len = (socklen_t) sizeof(*client_address);
+        rcva_len = (socklen_t) sizeof(*client_address);
         int flags = 0; // we do not request anything special
         char* buffer = new char[BUFFER_SIZE];
 
         size_t len = (size_t) recvfrom(sock, buffer, BUFFER_SIZE, flags,
-                                       (sockaddr *) client_address, rcva_len);
+                                       (sockaddr *) client_address, &rcva_len);
 
         datagram = new Datagram(len, buffer);
 
@@ -170,11 +188,9 @@ public:
     }
 
     /**
-     * Send udp datagram to all clients_vec.
-     * @len length of message to send
-     * @sock socket
+     * Send udp datagram to all clients.
      */
-    void send_to_all(socklen_t snda_len, int sock) {
+    void send_to_all() {
         for (unsigned i = 0; i < clients_vec.size(); i++)
             if (clients_vec[i]->is_alive()) {
                 datagram->send_udp(clients_vec[i]->get_address(), snda_len, sock);
@@ -195,37 +211,17 @@ int main(int argc, char *argv[]) {
     uint16_t port = atoi(argv[1]);
     char* filename = argv[2];
 
+    /* TODO erase it */
     printf("%d %s\n", port, filename);
 
-    Server server = Server(filename);
-
-    //********************************************
-
-    int sock;
-    struct sockaddr_in server_address;
-    struct sockaddr_in client_address;
-    socklen_t snda_len, rcva_len;
-
-    sock = socket(AF_INET, SOCK_DGRAM, 0); // creating IPv4 UDP socket
-    if (sock < 0)
-        syserr("socket");
-
-    server_address.sin_family = AF_INET; //IPv4
-    server_address.sin_addr.s_addr = htonl(INADDR_ANY); //listening on all interfaces
-    server_address.sin_port = htons(port);
-
-    // bin the socket to a concrete address
-    if (bind(sock, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address)) < 0)
-        syserr("bind");
-
-    snda_len = (socklen_t) sizeof(client_address);
+    Server server = Server(filename, port);
 
     //********************************************
 
 
     while (true) {
-        server.receive_udp(&rcva_len, sock);
-        server.send_to_all(snda_len, sock);
+        server.receive_udp();
+        server.send_to_all();
     }
 
 }
