@@ -3,7 +3,7 @@
 #include "err.h"
 #include "utils.h"
 
-#define BUFFER_SIZE 1000
+#define BUFFER_SIZE 65507
 #define DEFAULT_PORT 20160
 
 int sock;

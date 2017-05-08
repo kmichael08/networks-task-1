@@ -7,7 +7,7 @@
 
 #include "err.h"
 
-#define BUFFER_SIZE 1000
+#define BUFFER_SIZE 65507
 
 FILE* get_file_pointer(char *filename) {
     FILE* fp = fopen(filename, "r");
@@ -154,7 +154,7 @@ public:
 class Server {
 private:
     static const int MAX_CLIENTS = 42;
-    static const int TIMEOUT_MILLISECS = 500;
+    static const int TIMEOUT_MILLISECS = 200;
     std::vector<Client*> clients_vec;
     char *filename;
     DatagramCyclicBuffer datagram_cyclic_buffer;
