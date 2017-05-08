@@ -60,7 +60,7 @@ public:
     bool valid_datagram() {
         try {
             uint64_t timestamp = std::stoull(datagram);
-            return timestamp < secs_4243_year;
+            return timestamp < secs_4243_year && datagram[len - 2] == ' ';
         }
         catch (std::out_of_range& e) {
             return false;
