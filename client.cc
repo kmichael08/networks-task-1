@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
         if (rcv_len < 0)
             syserr("read");
 
-        (void) printf("%s", buffer);
+        (void) printf("%s\n", buffer);
     }
 
 
